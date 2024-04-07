@@ -1,9 +1,17 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#include <gmp.h>
 
 // Constants
 #define BLOCK_SIZE 64
+mpz_t P;
+void initialize_constants()
+{
+  // Initialize P
+  mpz_init_set_str(P, "3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFB", 16); // 16 for hexadecimal
+}
 
 void chacha20_poly1305_init(uint32_t state[16], const uint8_t key[32], const uint8_t nonce[12], uint32_t counter)
 {
@@ -132,19 +140,108 @@ void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12], uint32_t c
   }
 }
 
+void poly1305_key_gen(const uint8_t key[32], const uint8_t nonce[12], uint32_t counter, uint8_t poly1305_key[32])
+{
+  uint8_t block[64];
+  chacha20_block(key, nonce, counter, block);
+  memcpy(poly1305_key, block, 32);
+}
+
+void num_to_8_le_bytes(uint64_t num, uint8_t *bytes)
+{
+  for (int i = 0; i < 8; i++)
+  {
+    bytes[i] = (num >> (i * 8)) & 0xFF;
+  }
+}
+
+void poly1305_key_clamp(uint8_t r[16])
+{
+  r[3] &= 15;
+  r[7] &= 15;
+  r[11] &= 15;
+  r[15] &= 15;
+  r[4] &= 252;
+  r[8] &= 252;
+  r[12] &= 252;
+}
+
+uint64_t little_endian_bytes_to_number(const uint8_t *bytes)
+{
+  uint64_t number = 0;
+  for (int i = 0; i < 8; i++)
+  {
+    number |= ((uint64_t)bytes[i]) << (i * 8);
+  }
+  return number;
+}
+
+void num_to_16_le_bytes(uint64_t num, uint8_t *bytes)
+{
+  for (int i = 0; i < 16; i++)
+  {
+    bytes[i] = (num >> (i * 8)) & 0xFF;
+  }
+}
+
+void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_t *mac)
+{
+  mpz_t r, a, temp;
+  mpz_init(r);
+  mpz_init(a);
+  mpz_init(temp);
+
+  mpz_import(r, 16, 1, sizeof(uint8_t), 0, 0, key);
+  poly1305_key_clamp((uint8_t *)&r);
+
+  uint64_t s = little_endian_bytes_to_number(key + 16);
+  uint64_t a_accumulator = 0;
+
+  for (size_t i = 0; i < msg_len; i += 16)
+  {
+    uint64_t n = little_endian_bytes_to_number(msg + i);
+    a_accumulator += n;
+
+    mpz_set_ui(temp, a_accumulator);
+    mpz_mul(temp, r, temp);
+    mpz_mod(temp, temp, P);
+
+    a_accumulator = mpz_get_ui(temp);
+  }
+
+  a_accumulator += s;
+  num_to_16_le_bytes(a_accumulator, mac);
+
+  mpz_clear(r);
+  mpz_clear(a);
+  mpz_clear(temp);
+}
+
 int main()
 {
-  uint8_t key[32] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
-  uint8_t nonce[12] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00, 0x00, 0x00};
-  uint32_t counter = 1;
+  initialize_constants();
+  uint8_t key[32] = {0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
+                     0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f};
+  uint8_t nonce[12] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+  uint32_t counter = 0;
   uint8_t plaintext[] = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+  uint8_t poly1305_key[32];
+  uint8_t aad[] = {0x50, 0x51, 0x52, 0x53, 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7};
+
+  // Authentication
+  poly1305_key_gen(key, nonce, counter, poly1305_key);
+  printf("Poly1305 key: ");
+  for (int i = 0; i < 32; i++)
+  {
+    printf("%02x ", poly1305_key[i]);
+  }
+  printf("\n");
 
   // Encryption
   size_t msg_len = strlen((char *)plaintext);
   uint8_t encrypted_message[msg_len];
   memset(encrypted_message, 0, msg_len);
-  chacha20_encrypt(key, nonce, counter, plaintext, msg_len, encrypted_message);
+  chacha20_encrypt(key, nonce, counter + 1, plaintext, msg_len, encrypted_message);
   printf("Encrypted message");
   printf("\n");
   for (int i = 0; i < msg_len; i++)
@@ -155,5 +252,48 @@ int main()
       printf("\n");
     }
   }
+
+  // Preparing MAC
+  size_t aad_len = sizeof(aad);
+  size_t aad_padded_len = aad_len + (16 - (aad_len % 16));
+  uint8_t padded_aad[aad_padded_len];
+  memset(padded_aad, 0, aad_padded_len);
+  memcpy(padded_aad, aad, aad_len);
+
+  size_t ctx_padded_len = msg_len + (16 - (msg_len % 16));
+  uint8_t padded_ctx[ctx_padded_len];
+  memset(padded_ctx, 0, ctx_padded_len);
+  memcpy(padded_ctx, encrypted_message, msg_len);
+
+  uint8_t aad_len_le[8];
+  uint8_t ctx_len_le[8];
+  num_to_8_le_bytes(aad_len, aad_len_le);
+  num_to_8_le_bytes(msg_len, ctx_len_le);
+
+  size_t mac_data_len = aad_padded_len + ctx_padded_len + sizeof(aad_len_le) + sizeof(ctx_len_le);
+  uint8_t mac_data[mac_data_len];
+
+  // Copy padded_aad into mac_data
+  memcpy(mac_data, padded_aad, aad_padded_len);
+
+  // Copy padded_ctx into mac_data, starting after padded_aad
+  memcpy(mac_data + aad_padded_len, padded_ctx, ctx_padded_len);
+
+  // Copy aad_len_le into mac_data, starting after padded_aad and padded_ctx
+  memcpy(mac_data + aad_padded_len + ctx_padded_len, aad_len_le, sizeof(aad_len_le));
+
+  // Copy ctx_len_le into mac_data, starting after padded_aad, padded_ctx, and aad_len_le
+  memcpy(mac_data + aad_padded_len + ctx_padded_len + sizeof(aad_len_le), ctx_len_le, sizeof(ctx_len_le));
+
+  uint8_t mac[16];
+  poly1305_mac(mac_data, poly1305_key, mac_data_len, mac);
+
+  printf("\nMAC: ");
+  for (int i = 0; i < 16; i++)
+  {
+    printf("%02x ", mac[i]);
+  }
+  printf("\n");
+
   return 0;
 }
