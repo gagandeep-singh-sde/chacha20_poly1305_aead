@@ -185,9 +185,11 @@ void num_to_16_le_bytes(uint64_t num, uint8_t *bytes)
 
 void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_t *mac)
 {
-  mpz_t r, a, temp;
+  mpz_t r, s, n, a_accumulator, temp;
   mpz_init(r);
-  mpz_init(a);
+  mpz_init(s);
+  mpz_init(n);
+  mpz_init(a_accumulator);
   mpz_init(temp);
 
   mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, key);
@@ -195,26 +197,58 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
   mpz_export(r_exported, NULL, -1, sizeof(uint8_t), 0, 0, r);
   poly1305_key_clamp(r_exported);
   mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, r_exported);
-  gmp_printf("\nr: %Zd\n", r);
-  uint64_t s = little_endian_bytes_to_number(key + 16);
-  uint64_t a_accumulator = 0;
+  mpz_import(s, 16, -1, sizeof(uint8_t), 0, 0, key + 16);
+  // gmp_printf("\nr: %Zd\n", r);
+  // gmp_printf("\ns: %Zd\n", s);
 
-  for (size_t i = 0; i < msg_len; i += 16)
+  size_t quotient = msg_len / 16;
+  size_t remainder = msg_len % 16;
+  for (size_t i = 0; i < quotient; i++)
   {
-    uint64_t n = little_endian_bytes_to_number(msg + i);
-    a_accumulator += n;
-
-    mpz_set_ui(temp, a_accumulator);
+    mpz_import(n, 16, -1, sizeof(uint8_t), 0, 0, msg + i * 16);
+    char *str = mpz_get_str(NULL, 16, n);
+    char new_str[35];
+    gmp_sprintf(new_str, "1%s", str);
+    mpz_set_str(n, new_str, 16);
+    free(str);
+    gmp_printf("\nn: %Zd\n", n);
+    mpz_add(a_accumulator, a_accumulator, n);
+    gmp_printf("\nAccumulator: %Zd\n", a_accumulator);
+    mpz_set(temp, a_accumulator);
     mpz_mul(temp, r, temp);
+    gmp_printf("\n(Acc + Block) * r: %Zd\n", temp);
     mpz_mod(temp, temp, P);
 
-    a_accumulator = mpz_get_ui(temp);
+    mpz_set(a_accumulator, temp);
+    gmp_printf("\n((Acc+Block)*r) % P: %Zd\n", a_accumulator);
   }
-  a_accumulator += s;
-  num_to_16_le_bytes(a_accumulator, mac);
+  if (remainder != 0)
+  {
+    mpz_import(n, remainder, -1, sizeof(uint8_t), 0, 0, msg + quotient * 16);
+    char *str = mpz_get_str(NULL, 16, n);
+    char new_str[35];
+    gmp_sprintf(new_str, "1%s", str);
+    mpz_set_str(n, new_str, 16);
+    free(str);
+    gmp_printf("\nn: %Zd\n", n);
+    mpz_add(a_accumulator, a_accumulator, n);
+    gmp_printf("\nAccumulator: %Zd\n", a_accumulator);
+    mpz_set(temp, a_accumulator);
+    mpz_mul(temp, r, temp);
+    gmp_printf("\n(Acc + Block) * r: %Zd\n", temp);
+    mpz_mod(temp, temp, P);
+
+    mpz_set(a_accumulator, temp);
+    gmp_printf("\n((Acc+Block)*r) % P: %Zd\n", a_accumulator);
+  }
+  mpz_add(a_accumulator, a_accumulator, s);
+  gmp_printf("\nTag: %Zd\n", a_accumulator);
+  mpz_export(mac, NULL, -1, sizeof(uint8_t), 0, 0, a_accumulator);
 
   mpz_clear(r);
-  mpz_clear(a);
+  mpz_clear(s);
+  mpz_clear(n);
+  mpz_clear(a_accumulator);
   mpz_clear(temp);
 }
 
@@ -231,28 +265,28 @@ int main()
 
   // Authentication
   poly1305_key_gen(key, nonce, counter, poly1305_key);
-  printf("Poly1305 key: ");
-  for (int i = 0; i < 32; i++)
-  {
-    printf("%02x ", poly1305_key[i]);
-  }
-  printf("\n");
+  // printf("Poly1305 key: ");
+  // for (int i = 0; i < 32; i++)
+  // {
+  //   printf("%02x ", poly1305_key[i]);
+  // }
+  // printf("\n");
 
   // Encryption
   size_t msg_len = strlen((char *)plaintext);
   uint8_t encrypted_message[msg_len];
   memset(encrypted_message, 0, msg_len);
   chacha20_encrypt(key, nonce, counter + 1, plaintext, msg_len, encrypted_message);
-  printf("Encrypted message");
-  printf("\n");
-  for (int i = 0; i < msg_len; i++)
-  {
-    printf("%02x ", encrypted_message[i]);
-    if ((i + 1) % 16 == 0)
-    {
-      printf("\n");
-    }
-  }
+  // printf("Encrypted message");
+  // printf("\n");
+  // for (int i = 0; i < msg_len; i++)
+  // {
+  //   printf("%02x ", encrypted_message[i]);
+  //   if ((i + 1) % 16 == 0)
+  //   {
+  //     printf("\n");
+  //   }
+  // }
 
   // Preparing Message Authentication Data
   size_t aad_len = sizeof(aad);
@@ -289,16 +323,16 @@ int main()
   // memcpy(mac_data + aad_padded_len + ctx_padded_len, ctx_len_le, sizeof(ctx_len_le));
 
   // Print mac_data as a hexadecimal string
-  printf("\n MAC Data: \n");
-  for (size_t i = 0; i < mac_data_len; i++)
-  {
-    printf("%02x ", mac_data[i]);
-    if ((i + 1) % 16 == 0)
-    {
-      printf("\n");
-    }
-  }
-  printf("\n");
+  // printf("\n MAC Data: \n");
+  // for (size_t i = 0; i < mac_data_len; i++)
+  // {
+  //   printf("%02x ", mac_data[i]);
+  //   if ((i + 1) % 16 == 0)
+  //   {
+  //     printf("\n");
+  //   }
+  // }
+  // printf("\n");
 
   uint8_t mac[16];
   poly1305_mac(plaintext, key, msg_len, mac);
