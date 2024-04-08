@@ -185,17 +185,17 @@ void num_to_16_le_bytes(uint64_t num, uint8_t *bytes)
 
 void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_t *mac)
 {
-  mpz_t r, a, temp;
+  mpz_t r, temp;
   mpz_init(r);
-  mpz_init(a);
   mpz_init(temp);
 
-  mpz_import(r, 16, 1, sizeof(uint8_t), 0, 0, key);
+  mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, key);
   uint8_t r_exported[16];
   mpz_export(r_exported, NULL, -1, sizeof(uint8_t), 0, 0, r);
   poly1305_key_clamp(r_exported);
   mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, r_exported);
   uint64_t s = little_endian_bytes_to_number(key + 16);
+  printf("s: %llu\n", s);
   uint64_t a_accumulator = 0;
 
   for (size_t i = 0; i < msg_len; i += 16)
@@ -213,7 +213,6 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
   num_to_16_le_bytes(a_accumulator, mac);
 
   mpz_clear(r);
-  mpz_clear(a);
   mpz_clear(temp);
 }
 
