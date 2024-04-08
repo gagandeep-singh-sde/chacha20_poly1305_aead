@@ -190,11 +190,12 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
   mpz_init(a);
   mpz_init(temp);
 
-  mpz_import(r, 16, 1, sizeof(uint8_t), 0, 0, key);
+  mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, key);
   uint8_t r_exported[16];
   mpz_export(r_exported, NULL, -1, sizeof(uint8_t), 0, 0, r);
   poly1305_key_clamp(r_exported);
   mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, r_exported);
+  gmp_printf("\nr: %Zd\n", r);
   uint64_t s = little_endian_bytes_to_number(key + 16);
   uint64_t a_accumulator = 0;
 
@@ -220,11 +221,11 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
 int main()
 {
   initialize_constants();
-  uint8_t key[32] = {0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
-                     0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f};
+  uint8_t key[32] = {0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33, 0x7f, 0x44, 0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8,
+                     0x01, 0x03, 0x80, 0x8a, 0xfb, 0x0d, 0xb2, 0xfd, 0x4a, 0xbf, 0xf6, 0xaf, 0x41, 0x49, 0xf5, 0x1b};
   uint8_t nonce[12] = {0x07, 0x00, 0x00, 0x00, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47};
   uint32_t counter = 0;
-  uint8_t plaintext[] = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+  uint8_t plaintext[] = "Cryptographic Forum Research Group";
   uint8_t poly1305_key[32];
   uint8_t aad[] = {0x50, 0x51, 0x52, 0x53, 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7};
 
@@ -300,7 +301,7 @@ int main()
   printf("\n");
 
   uint8_t mac[16];
-  poly1305_mac(mac_data, poly1305_key, mac_data_len, mac);
+  poly1305_mac(plaintext, key, msg_len, mac);
 
   printf("\nMAC: ");
   for (int i = 0; i < 16; i++)
