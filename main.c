@@ -87,7 +87,6 @@ void serialized_block(uint32_t *array, uint8_t *key_stream)
     key_stream[i * 4 + 2] = (array[i] >> 16) & 0xFF;
     key_stream[i * 4 + 3] = (array[i] >> 24) & 0xFF;
   }
-  printf("\n");
 }
 
 void chacha20_block(const uint8_t key[32], const uint8_t nonce[12], uint32_t counter, uint8_t *key_stream)
@@ -99,15 +98,15 @@ void chacha20_block(const uint8_t key[32], const uint8_t nonce[12], uint32_t cou
   inner_block(state);
   add_states(state, original_state);
   serialized_block(state, key_stream);
-  for (int i = 0; i < 16; i++)
-  {
-    printf("%02x ", state[i]);
-    if ((i + 1) % 4 == 0)
-    {
-      printf("\n");
-    }
-  }
-  printf("\n");
+  // for (int i = 0; i < 16; i++)
+  // {
+  //   printf("%02x ", state[i]);
+  //   if ((i + 1) % 4 == 0)
+  //   {
+  //     printf("\n");
+  //   }
+  // }
+  // printf("\n");
 }
 
 void xor_blocks(const uint8_t block1[64], const uint8_t block2[64], uint8_t result[64])
@@ -192,8 +191,10 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
   mpz_init(temp);
 
   mpz_import(r, 16, 1, sizeof(uint8_t), 0, 0, key);
-  poly1305_key_clamp((uint8_t *)&r);
-
+  uint8_t r_exported[16];
+  mpz_export(r_exported, NULL, -1, sizeof(uint8_t), 0, 0, r);
+  poly1305_key_clamp(r_exported);
+  mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, r_exported);
   uint64_t s = little_endian_bytes_to_number(key + 16);
   uint64_t a_accumulator = 0;
 
@@ -208,7 +209,6 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
 
     a_accumulator = mpz_get_ui(temp);
   }
-
   a_accumulator += s;
   num_to_16_le_bytes(a_accumulator, mac);
 
@@ -222,7 +222,7 @@ int main()
   initialize_constants();
   uint8_t key[32] = {0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
                      0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f};
-  uint8_t nonce[12] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+  uint8_t nonce[12] = {0x07, 0x00, 0x00, 0x00, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47};
   uint32_t counter = 0;
   uint8_t plaintext[] = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
   uint8_t poly1305_key[32];
@@ -253,7 +253,7 @@ int main()
     }
   }
 
-  // Preparing MAC
+  // Preparing Message Authentication Data
   size_t aad_len = sizeof(aad);
   size_t aad_padded_len = aad_len + (16 - (aad_len % 16));
   uint8_t padded_aad[aad_padded_len];
@@ -271,6 +271,7 @@ int main()
   num_to_8_le_bytes(msg_len, ctx_len_le);
 
   size_t mac_data_len = aad_padded_len + ctx_padded_len + sizeof(aad_len_le) + sizeof(ctx_len_le);
+  // size_t mac_data_len = aad_padded_len + ctx_padded_len + sizeof(ctx_len_le);
   uint8_t mac_data[mac_data_len];
 
   // Copy padded_aad into mac_data
@@ -284,6 +285,19 @@ int main()
 
   // Copy ctx_len_le into mac_data, starting after padded_aad, padded_ctx, and aad_len_le
   memcpy(mac_data + aad_padded_len + ctx_padded_len + sizeof(aad_len_le), ctx_len_le, sizeof(ctx_len_le));
+  // memcpy(mac_data + aad_padded_len + ctx_padded_len, ctx_len_le, sizeof(ctx_len_le));
+
+  // Print mac_data as a hexadecimal string
+  printf("\n MAC Data: \n");
+  for (size_t i = 0; i < mac_data_len; i++)
+  {
+    printf("%02x ", mac_data[i]);
+    if ((i + 1) % 16 == 0)
+    {
+      printf("\n");
+    }
+  }
+  printf("\n");
 
   uint8_t mac[16];
   poly1305_mac(mac_data, poly1305_key, mac_data_len, mac);
