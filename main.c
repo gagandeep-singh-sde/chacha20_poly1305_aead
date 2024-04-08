@@ -185,8 +185,11 @@ void num_to_16_le_bytes(uint64_t num, uint8_t *bytes)
 
 void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_t *mac)
 {
-  mpz_t r, temp;
+  mpz_t r, s, n, a_accumulator, temp;
   mpz_init(r);
+  mpz_init(s);
+  mpz_init(n);
+  mpz_init(a_accumulator);
   mpz_init(temp);
 
   mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, key);
@@ -194,25 +197,35 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
   mpz_export(r_exported, NULL, -1, sizeof(uint8_t), 0, 0, r);
   poly1305_key_clamp(r_exported);
   mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, r_exported);
-  uint64_t s = little_endian_bytes_to_number(key + 16);
-  printf("s: %llu\n", s);
-  uint64_t a_accumulator = 0;
+  mpz_import(s, 16, -1, sizeof(uint8_t), 0, 0, key + 16);
+  gmp_printf("\nr: %Zd\n", r);
+  gmp_printf("\ns: %Zd\n", s);
 
   for (size_t i = 0; i < msg_len; i += 16)
   {
-    uint64_t n = little_endian_bytes_to_number(msg + i);
-    a_accumulator += n;
-
-    mpz_set_ui(temp, a_accumulator);
+    mpz_import(n, 16, -1, sizeof(uint8_t), 0, 0, msg + i);
+    char *str = mpz_get_str(NULL, 16, n);
+    char new_str[35];
+    gmp_sprintf(new_str, "1%s", str);
+    mpz_set_str(n, new_str, 16);
+    free(str);
+    // gmp_printf("\nn: %Zd\n", n);
+    mpz_add(a_accumulator, a_accumulator, n);
+    // gmp_printf("\nAccumulator: %Zd\n", a_accumulator);
+    mpz_set(temp, a_accumulator);
     mpz_mul(temp, r, temp);
     mpz_mod(temp, temp, P);
 
-    a_accumulator = mpz_get_ui(temp);
+    mpz_set(a_accumulator, temp);
   }
-  a_accumulator += s;
-  num_to_16_le_bytes(a_accumulator, mac);
+  mpz_add(a_accumulator, a_accumulator, s);
+  gmp_printf("\nTag: %Zd\n", a_accumulator);
+  mpz_export(mac, NULL, -1, sizeof(uint8_t), 0, 0, a_accumulator);
 
   mpz_clear(r);
+  mpz_clear(s);
+  mpz_clear(n);
+  mpz_clear(a_accumulator);
   mpz_clear(temp);
 }
 
@@ -301,7 +314,7 @@ int main()
   uint8_t mac[16];
   poly1305_mac(mac_data, poly1305_key, mac_data_len, mac);
 
-  printf("\nMAC: ");
+  printf("\nTag: ");
   for (int i = 0; i < 16; i++)
   {
     printf("%02x ", mac[i]);
