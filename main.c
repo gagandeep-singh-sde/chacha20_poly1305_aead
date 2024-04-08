@@ -198,25 +198,48 @@ void poly1305_mac(const uint8_t *msg, const uint8_t *key, size_t msg_len, uint8_
   poly1305_key_clamp(r_exported);
   mpz_import(r, 16, -1, sizeof(uint8_t), 0, 0, r_exported);
   mpz_import(s, 16, -1, sizeof(uint8_t), 0, 0, key + 16);
-  gmp_printf("\nr: %Zd\n", r);
-  gmp_printf("\ns: %Zd\n", s);
+  // gmp_printf("\nr: %Zd\n", r);
+  // gmp_printf("\ns: %Zd\n", s);
 
-  for (size_t i = 0; i < msg_len; i += 16)
+  size_t quotient = msg_len / 16;
+  size_t remainder = msg_len % 16;
+  for (size_t i = 0; i < quotient; i++)
   {
-    mpz_import(n, 16, -1, sizeof(uint8_t), 0, 0, msg + i);
+    mpz_import(n, 16, -1, sizeof(uint8_t), 0, 0, msg + i * 16);
     char *str = mpz_get_str(NULL, 16, n);
     char new_str[35];
     gmp_sprintf(new_str, "1%s", str);
     mpz_set_str(n, new_str, 16);
     free(str);
-    // gmp_printf("\nn: %Zd\n", n);
+    gmp_printf("\nn: %Zd\n", n);
     mpz_add(a_accumulator, a_accumulator, n);
-    // gmp_printf("\nAccumulator: %Zd\n", a_accumulator);
+    gmp_printf("\nAccumulator: %Zd\n", a_accumulator);
     mpz_set(temp, a_accumulator);
     mpz_mul(temp, r, temp);
+    gmp_printf("\n(Acc + Block) * r: %Zd\n", temp);
     mpz_mod(temp, temp, P);
 
     mpz_set(a_accumulator, temp);
+    gmp_printf("\n((Acc+Block)*r) % P: %Zd\n", a_accumulator);
+  }
+  if (remainder != 0)
+  {
+    mpz_import(n, remainder, -1, sizeof(uint8_t), 0, 0, msg + quotient * 16);
+    char *str = mpz_get_str(NULL, 16, n);
+    char new_str[35];
+    gmp_sprintf(new_str, "1%s", str);
+    mpz_set_str(n, new_str, 16);
+    free(str);
+    gmp_printf("\nn: %Zd\n", n);
+    mpz_add(a_accumulator, a_accumulator, n);
+    gmp_printf("\nAccumulator: %Zd\n", a_accumulator);
+    mpz_set(temp, a_accumulator);
+    mpz_mul(temp, r, temp);
+    gmp_printf("\n(Acc + Block) * r: %Zd\n", temp);
+    mpz_mod(temp, temp, P);
+
+    mpz_set(a_accumulator, temp);
+    gmp_printf("\n((Acc+Block)*r) % P: %Zd\n", a_accumulator);
   }
   mpz_add(a_accumulator, a_accumulator, s);
   gmp_printf("\nTag: %Zd\n", a_accumulator);
