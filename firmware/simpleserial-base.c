@@ -35,20 +35,28 @@ uint8_t nonce[12];
 
 void chacha20_poly1305_init(uint32_t state[16], const uint8_t key[32], const uint8_t nonce[12], uint32_t counter)
 {
-    // Initialize constants
-    const uint32_t constants[4] = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574};
+    if (counter == 0)
+    {
+        // Initialize constants
+        const uint32_t constants[4] = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574};
 
-    // Initialize state with constants
-    memcpy(state, constants, sizeof(constants));
+        // Initialize state with constants
+        memcpy(state, constants, sizeof(constants));
 
-    // Set key
-    memcpy(&state[4], key, 32);
+        // Set key
+        memcpy(&state[4], key, 32);
 
-    // Set counter
-    state[12] = counter;
+        // Set counter
+        state[12] = counter;
 
-    // Set nonce
-    memcpy(&state[13], nonce, 12);
+        // Set nonce
+        memcpy(&state[13], nonce, 12);
+    }
+    else
+    {
+        // Set counter
+        state[12] = counter;
+    }
 }
 
 void copy_state(uint32_t dest[16], const uint32_t src[16])
