@@ -24,6 +24,7 @@
 #include "simpleserial.h"
 
 #define BLOCK_SIZE 64
+#define ROTL32(x, r) (((x) << (r)) | ((x) >> (32 - (r))))
 
 /*
 -----------------
@@ -76,18 +77,28 @@ void copy_state(uint32_t dest[16], const uint32_t src[16])
 
 void quarter_round(uint32_t state[16], int a, int b, int c, int d)
 {
-    state[a] = (state[a] + state[b]) & 0xFFFFFFFF;
-    state[d] ^= state[a];
-    state[d] = (state[d] << 16 | state[d] >> 16) & 0xFFFFFFFF;
-    state[c] = (state[c] + state[d]) & 0xFFFFFFFF;
-    state[b] ^= state[c];
-    state[b] = (state[b] << 12 | state[b] >> 20) & 0xFFFFFFFF;
-    state[a] = (state[a] + state[b]) & 0xFFFFFFFF;
-    state[d] ^= state[a];
-    state[d] = (state[d] << 8 | state[d] >> 24) & 0xFFFFFFFF;
-    state[c] = (state[c] + state[d]) & 0xFFFFFFFF;
-    state[b] ^= state[c];
-    state[b] = (state[b] << 7 | state[b] >> 25) & 0xFFFFFFFF;
+    uint32_t temp_a = state[a];
+    uint32_t temp_b = state[b];
+    uint32_t temp_c = state[c];
+    uint32_t temp_d = state[d];
+
+    temp_a += temp_b;
+    temp_d ^= temp_a;
+    temp_d = ROTL32(temp_d, 16);
+    temp_c += temp_d;
+    temp_b ^= temp_c;
+    temp_b = ROTL32(temp_b, 12);
+    temp_a += temp_b;
+    temp_d ^= temp_a;
+    temp_d = ROTL32(temp_d, 8);
+    temp_c += temp_d;
+    temp_b ^= temp_c;
+    temp_b = ROTL32(temp_b, 7);
+
+    state[a] = temp_a;
+    state[b] = temp_b;
+    state[c] = temp_c;
+    state[d] = temp_d;
 }
 
 void inner_block(uint32_t state[16])
