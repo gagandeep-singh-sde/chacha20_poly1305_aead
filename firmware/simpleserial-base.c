@@ -46,25 +46,32 @@ void chacha20_poly1305_init(uint32_t state[16], const uint8_t key[32], const uin
         // Set key
         memcpy(&state[4], key, 32);
 
-        // Set counter
-        state[12] = counter;
-
         // Set nonce
         memcpy(&state[13], nonce, 12);
     }
-    else
-    {
-        // Set counter
-        state[12] = counter;
-    }
+
+    // Set counter
+    state[12] = counter;
 }
 
 void copy_state(uint32_t dest[16], const uint32_t src[16])
 {
-    for (int i = 0; i < 16; i++)
-    {
-        dest[i] = src[i];
-    }
+    dest[0] = src[0];
+    dest[1] = src[1];
+    dest[2] = src[2];
+    dest[3] = src[3];
+    dest[4] = src[4];
+    dest[5] = src[5];
+    dest[6] = src[6];
+    dest[7] = src[7];
+    dest[8] = src[8];
+    dest[9] = src[9];
+    dest[10] = src[10];
+    dest[11] = src[11];
+    dest[12] = src[12];
+    dest[13] = src[13];
+    dest[14] = src[14];
+    dest[15] = src[15];
 }
 
 void quarter_round(uint32_t state[16], int a, int b, int c, int d)
