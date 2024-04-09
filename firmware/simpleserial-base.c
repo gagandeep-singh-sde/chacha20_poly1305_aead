@@ -98,10 +98,18 @@ void inner_block(uint32_t state[16])
         quarter_round(state, 1, 5, 9, 13);
         quarter_round(state, 2, 6, 10, 14);
         quarter_round(state, 3, 7, 11, 15);
-        quarter_round(state, 0, 5, 10, 15);
-        quarter_round(state, 1, 6, 11, 12);
-        quarter_round(state, 2, 7, 8, 13);
-        quarter_round(state, 3, 4, 9, 14);
+
+        // Calculate indices for the remaining quarter rounds
+        int a_index[] = {0, 1, 2, 3};
+        int b_index[] = {5, 6, 7, 4};
+        int c_index[] = {10, 11, 8, 9};
+        int d_index[] = {15, 12, 13, 14};
+
+        // Perform remaining quarter rounds using calculated indices
+        for (int j = 0; j < 4; j++)
+        {
+            quarter_round(state, a_index[j], b_index[j], c_index[j], d_index[j]);
+        }
     }
 }
 
